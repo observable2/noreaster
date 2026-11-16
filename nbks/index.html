@@ -1,0 +1,56 @@
+<!doctype html>
+<notebook theme="midnight">
+  <title>Noreaster</title>
+  <script id="2" type="text/markdown" hidden="">
+    # Noreaster
+  </script>
+  <script id="1" type="text/html">
+    <div id="field"></div>
+    <div id="byline">
+    <span id="bytext"><cite>Noreaster</cite> by John Cayley</span>
+    </div>
+  </script>
+  <script id="3" type="module">
+    console.log("--- Noreaster, Nov 2026 ---");
+
+    // Wait for the DOM to be ready before querying elements
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    const byline = document.getElementById("byline");
+    if (byline) {
+      if (window != window.top) {
+        console.log("This page is in an iframe");
+        byline.style.opacity = 0; // change to 1 if you want byline to show in iFrame
+      } else {
+        console.log("This window is top");
+        byline.style.opacity = 0;
+      }
+    } else {
+      console.log("WARNING: #byline element not found");
+    }
+
+    // the config exported from scoring-noreaster.html (same settings the spels were measured with)
+    const { createConfig } = await import("scoringthespeltair");
+    const config = createConfig(await FileAttachment("./data/config.json").json());
+    // type from the config, as the notebook measured it (see typeCss in the engine)
+    const { typeCss } = await import("scoringthespeltair");
+    const typeStyle = document.createElement("style");
+    typeStyle.textContent = typeCss(config, "#field");
+    document.head.append(typeStyle);
+    // --- DEBUG configuration
+    // config.startPara = 2; // DEBUG when RECORDING & REDUCTING EDIT here
+    // config.running = false; // DEBUG
+    const fieldElem = document.getElementById("field");
+    const spels = new Map(await FileAttachment("./data/spels.json").json());
+    const paras = await FileAttachment("./data/paras.json").json();
+    const scores = await FileAttachment("./data/scores.json").json();
+    const measuredWith = await FileAttachment("./data/measured.json").json();
+    // puts the spels in the field (character by character if config.charFades), warns in the console
+    // if the type differs from what they were measured in, and centres the field on their extent
+    const { mount } = await import("scoringthespeltair");
+    mount(config, fieldElem, { spels, measuredWith });
+    // --- animation, based on the play() method in observablehq.com/@shadoof/sounding ---
+    const { play } = await import("scoringthespeltair");
+    if (config.running) play(config, fieldElem, spels, paras, scores);
+  </script>
+</notebook>
