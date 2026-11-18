@@ -23,12 +23,16 @@
       @import url("@fontsource-variable/source-serif-4/opsz.css");
       @import url("@fontsource-variable/source-serif-4/opsz-italic.css");
 
+      /* The page rules below apply only to a notebook that has the #field element (the piece,
+         index.html). Others using this template, such as the working notebook
+         scoring-noreaster.html, keep the kit's chrome and their own notebook theme. */
+
       /* neutralise the kit's page chrome (body margin/padding, <main> max-width) */
-      html, body {
+      html:has(#field), body:has(#field) {
         margin: 0;
         padding: 0;
       }
-      body {
+      body:has(#field) {
         /* override the kit's theme colours once; everything below uses them.
            Set on body, not :root: the theme stylesheet is injected after this
            one and would win a same-specificity :root override. */
@@ -36,7 +40,7 @@
         --theme-foreground: floralwhite;
         cursor: none;
       }
-      main {
+      body:has(#field) main {
         margin: 0;
         max-width: none;
       }

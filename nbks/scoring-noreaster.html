@@ -99,10 +99,10 @@
 
     1. *listens* to it with Whisper, a speech recognizer that runs in your browser (the model is downloaded once from Hugging Face and then cached; your audio never leaves your machine) and returns the words heard with their times;
     2. *aligns* the words heard to the words of the galley (Whisper is only a listener: the galley is the text, so a misheard word does not matter much);
-    3. gives each spel an **onset**, the second at which its first word begins. A spel's `pause` is the time from its onset to the next spel's onset;
+    3. gives each spel an **onset**, the second at which its first word begins (Whisper often starts the first word after a silence too early, so where a word's span contains a silence the onset is *snapped* to where the sound resumes, shown in orange). A spel's `pause` is the time from its onset to the next spel's onset;
     4. lets you **adjust the onsets paragraph by paragraph**, listening as you go.
 
-    Spels that could not be matched to anything heard are marked *guessed* (in red): check those first. When you are satisfied, the Export cell below uses the performed scores in `scores.json` in place of the linear ones.
+    Spels that could not be matched to anything heard are marked *guessed* (in red), and a pause longer than 1.5 s is flagged ⚑ (in red): check those first. When you are satisfied, the Export cell below uses the performed scores in `scores.json` in place of the linear ones.
   </script>
   <script id="7002" type="module">
     // THE CONTROLS: a recording, a Whisper model, and a button to start. Listening is slow, so it only
@@ -135,7 +135,8 @@
   </script>
   <script id="7004" type="module">
     // LISTENING: runs Whisper on the recording. Gives an array of words heard, in order:
-    //   [{ text: "broad", start: 12.34 }, ...]   (start: seconds from the start of the recording)
+    //   [{ text: "broad", start: 12.34, end: 12.71 }, ...]   (seconds from the start of the recording)
+    // with the recording's samples (.samples, mono, at .sampleRate) as properties of the array,
     // or null until the button has been pressed.
 
     // Which version of Transformers.js to use, from jsDelivr, as the engine is loaded above.
@@ -182,7 +183,10 @@
         })
 
         status.textContent = `Heard ${result.chunks.length} words.`
-        return result.chunks.map((chunk) => ({ text: chunk.text.trim(), start: chunk.timestamp[0] }))
+        // Whisper's word times are not always where the sound is (see the cell that snaps the onsets), so
+        // we also keep when each word ends and the samples themselves, as properties of the array.
+        const words = result.chunks.map((chunk) => ({ text: chunk.text.trim(), start: chunk.timestamp[0], end: chunk.timestamp[1] }))
+        return Object.assign(words, { samples, sampleRate: 16000 })
       } catch (error) {
         status.textContent = `Could not listen to the recording: ${error.message}`
         return null
@@ -275,9 +279,53 @@
       return matches
     }
   </script>
+  <script id="7010" type="module">
+    // SNAPPING: Whisper's start time for the first word after a silence is often too early: the word is
+    // stretched back over the silence, to the end of the word before. (Each line of this piece is
+    // followed by a pause of a couple of seconds, so a line's first word, e.g. the "the" of "the ringing in
+    // my ears", would get a very long pause.) Here we look at the sound itself. A word's start moves
+    // to where the sound resumes whenever the span Whisper gave the word contains a silence.
+
+    const FRAME_S = 0.01        // loudness is measured in frames this long
+    const ABOVE_FLOOR_DB = 15   // a frame is sound if it is this much louder than the quietest 10% of the recording
+    const MIN_SILENCE_S = 0.25  // a silence is at least this long
+    const LEAD_S = 0.03         // the sound is found at its first loud frame: start a little before
+
+    // one true or false per frame of the recording: is there sound (speech, breath, a click) in it?
+    const soundFrames = (samples, sampleRate) => {
+      const size = Math.round(sampleRate * FRAME_S)
+      const count = Math.floor(samples.length / size)
+      const db = new Float32Array(count)
+      for (let k = 0; k < count; k++) {
+        let sum = 0
+        for (let i = k * size; i < (k + 1) * size; i++) sum += samples[i] * samples[i]
+        db[k] = 10 * Math.log10(sum / size + 1e-12) // the frame's mean power, in dB
+      }
+      const floor = Array.from(db).sort((a, b) => a - b)[Math.floor(count * 0.1)]
+      return Array.from(db, (v) => v > floor + ABOVE_FLOOR_DB)
+    }
+
+    // Where the sound resumes after the last long silence in [start, end] (seconds), or null if there is
+    // no such silence in the span (or the span ends in one, which leaves no sound to start at).
+    const snapOnset = (sound, start, end) => {
+      const a = Math.max(0, Math.floor(start / FRAME_S))
+      const b = Math.min(sound.length, Math.ceil(end / FRAME_S))
+      const longest = Math.round(MIN_SILENCE_S / FRAME_S)
+      let onset = null
+      let silent = 0
+      for (let k = a; k < b; k++) {
+        if (!sound[k]) silent++
+        else {
+          if (silent >= longest) onset = k
+          silent = 0
+        }
+      }
+      return onset === null ? null : Math.max(start, onset * FRAME_S - LEAD_S)
+    }
+  </script>
   <script id="7006" type="module">
     // ALIGNING, part 2: the onset of every spel. Gives one row per spel, in text order:
-    //   { id, para, string, heard, onset (seconds), how: "matched" | "guessed" }
+    //   { id, para, string, heard, onset (seconds), how: "matched" | "snapped" | "guessed" }
     // or null until something has been heard.
 
     // A spel with nothing matched to it is placed between its neighbours, or, after the last matched
@@ -288,9 +336,13 @@
       if (!heard) return null
 
       // the words heard, normalized (a word that normalizes to nothing is dropped)
+      // (a word's end, which Whisper may not give, is taken to be the start of the next word heard)
       const heardWords = heard
-        .map((h) => ({ word: normalizeWord(h.text), text: h.text, start: h.start ?? 0 }))
+        .map((h, i) => ({ word: normalizeWord(h.text), text: h.text, start: h.start ?? 0, end: h.end ?? heard[i + 1]?.start ?? h.start ?? 0 }))
         .filter((h) => h.word)
+
+      // the sound of the recording, to snap onsets to (see the snapping cell above)
+      const sound = heard.samples ? soundFrames(heard.samples, heard.sampleRate) : null
 
       const matches = alignSequences(scriptWords.map((w) => w.word), heardWords.map((h) => h.word))
 
@@ -304,13 +356,19 @@
         heardAs.get(scriptWord.spelId).push(heardWords[matches[i]].text)
       })
 
+      let snappedCount = 0
       const rows = Array.from(spels.values(), (spel) => {
         const j = firstHeard.get(spel.id)
+        let onset = j === undefined ? null : heardWords[j].start
+        let how = j === undefined ? "guessed" : "matched"
+        if (sound && j !== undefined) {
+          const snapped = snapOnset(sound, heardWords[j].start, heardWords[j].end)
+          if (snapped !== null && snapped - onset > 0.05) { onset = snapped; how = "snapped"; snappedCount++ }
+        }
         return {
           id: spel.id, para: spel.para, string: spel.string,
           heard: (heardAs.get(spel.id) ?? []).join(" "), // what Whisper wrote for this spel, to see how it was matched
-          onset: j === undefined ? null : heardWords[j].start,
-          how: j === undefined ? "guessed" : "matched"
+          onset, how
         }
       })
 
@@ -335,7 +393,7 @@
       // hundredths of a second are plenty, and are what the editor below shows
       rows.forEach((row) => { row.onset = Math.round(row.onset * 100) / 100 })
 
-      display(html`<p>${known.length} of ${rows.length} spels were matched to words heard; the other ${rows.length - known.length} are guessed.</p>`)
+      display(html`<p>${known.length} of ${rows.length} spels were matched to words heard; the other ${rows.length - known.length} are guessed. ${snappedCount} onsets were moved later, to where the sound resumes after a silence (<i>snapped</i>).</p>`)
       return rows
     })()
   </script>
@@ -346,6 +404,9 @@
 
     // When you play from a spel, start this many seconds before it, to hear the approach.
     const LEAD_IN_S = 0.5
+    // A spel whose pause (the time to the next spel's onset, in its para) is longer than this is flagged: a
+    // long pause is often an onset that is too early, or the next one too late. Check those first.
+    const FLAG_PAUSE_S = 1.5
 
     const onsetEditor = (rows, file, paraNames) => {
       // THE STATE: the onsets being edited, and what we say about how each came to be
@@ -366,7 +427,7 @@
       })
       const paraSelect = Inputs.select(paraNames, { label: "Paragraph" })
       const playParaButton = html`<button>▶ play this paragraph</button>`
-      const table = html`<table><thead><tr><th></th><th>spel</th><th>onset (s)</th><th></th><th>heard as</th><th></th></tr></thead><tbody></tbody></table>`
+      const table = html`<table><thead><tr><th></th><th>spel</th><th>onset (s)</th><th></th><th>pause (s)</th><th>heard as</th><th></th></tr></thead><tbody></tbody></table>`
       const tbody = table.querySelector("tbody")
 
       const root = html`<div>
@@ -415,13 +476,26 @@
         return cell
       }
 
+      // The pause of the spel at i: the time to the next onset, if that spel is in the same para (else null)
+      const pauseOf = (i) => (i + 1 < rows.length && rows[i + 1].para === rows[i].para ? onsets[i + 1] - onsets[i] : null)
+      // show the pauses of the rows on screen, flagging the long ones
+      const showPauses = () => {
+        shown.forEach(({ i, pauseCell }) => {
+          const pause = pauseOf(i)
+          const long = pause !== null && pause > FLAG_PAUSE_S
+          pauseCell.textContent = pause === null ? "" : pause.toFixed(2) + (long ? " ⚑" : "")
+          pauseCell.style.color = long ? "crimson" : "gray"
+          pauseCell.style.fontWeight = long ? "bold" : ""
+        })
+      }
+
       // DRAWING the table for the paragraph chosen: one row per spel
       const render = () => {
         shown = spelsOfPara(paraSelect.value).map((i) => {
           const howCell = td(labels[i])
           const showHow = () => {
             howCell.textContent = labels[i]
-            howCell.style.color = labels[i] === "guessed" ? "crimson" : "gray"
+            howCell.style.color = labels[i] === "guessed" ? "crimson" : labels[i] === "snapped" ? "darkorange" : "gray"
           }
           showHow()
 
@@ -430,6 +504,7 @@
             onsets[i] = Math.max(0, seconds)
             labels[i] = "adjusted"
             showHow()
+            showPauses()
             root.value = onsets.slice() // a new array each time, so watchers see a change
             root.dispatchEvent(new Event("input", { bubbles: true }))
           }
@@ -451,11 +526,13 @@
             change(time)
           }
 
+          const pauseCell = td()
           const tr = document.createElement("tr")
-          tr.append(td(playButton), td(rows[i].string.replace(/\s+/g, " ")), td(input), td(nowButton), td(rows[i].heard), howCell)
-          return { i, tr }
+          tr.append(td(playButton), td(rows[i].string.replace(/\s+/g, " ")), td(input), td(nowButton), pauseCell, td(rows[i].heard), howCell)
+          return { i, tr, pauseCell }
         })
         tbody.replaceChildren(...shown.map(({ tr }) => tr))
+        showPauses()
         highlight(audio.currentTime)
       }
 
