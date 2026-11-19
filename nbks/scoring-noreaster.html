@@ -12,7 +12,7 @@
     // engine's version: "@main" follows the branch (cached, so it can lag a push, and is unreleased); a release tag
     // such as "@v0.5.0" pins it. Move to a new release by changing this one tag (the engine's
     // scripts/bump.js does it for a whole project; see the engine's README, "Releases").
-    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.7.1";
+    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.9.0";
     const load = async (f) => {
       try { return await import(`${engine}/${f}`); }
       catch (e) { throw new Error(`Could not load the engine file ${f} from ${engine} (offline, or tag missing?): ${e.message}`); }
@@ -77,7 +77,7 @@
     const { spelTime } = await import(`${engine}/timetoread.js`)
   </script>
   <script id="5741" type="module" pinned="">
-    // one score (array of { id, pause }) per para, in text order. A spel's pause (ms) is spelTime:
+    // one score (array of { id, duration }) per para, in text order. A spel's duration (ms) is spelTime:
     // the time to read it (the whitespace inside a multi-word spel counts) plus the whitespace that
     // follows it in the galley, up to the next spel (the galley is white-space: pre, so its whitespace
     // is respected). The last spel of a para carries no such gap and no end-of-para pause: what
@@ -89,7 +89,7 @@
         const spel = spels.get(id);
         const following = Array.from(spels.values())[spel.index + 1];
         const gap = i === ids.length - 1 ? "" : layout.text.slice(spel.end, following ? following.start : undefined);
-        return { id, pause: spelTime(spel.string, gap, 1, readOptions) };
+        return { id, duration: spelTime(spel.string, gap, 1, readOptions) };
       }))
   </script>
   <script id="7001" type="text/markdown">
@@ -99,10 +99,10 @@
 
     1. *listens* to it with Whisper, a speech recognizer that runs in your browser (the model is downloaded once from Hugging Face and then cached; your audio never leaves your machine) and returns the words heard with their times;
     2. *aligns* the words heard to the words of the galley (Whisper is only a listener: the galley is the text, so a misheard word does not matter much);
-    3. gives each spel an **onset**, the second at which its first word begins (Whisper often starts the first word after a silence too early, so where a word's span contains a silence the onset is *snapped* to where the sound resumes, shown in orange). A spel's `pause` is the time from its onset to the next spel's onset;
+    3. gives each spel an **onset**, the second at which its first word begins (Whisper often starts the first word after a silence too early, so where a word's span contains a silence the onset is *snapped* to where the sound resumes, shown in orange). A spel's `duration` is the time from its onset to the next spel's onset;
     4. lets you **adjust the onsets paragraph by paragraph**, listening as you go.
 
-    Spels that could not be matched to anything heard are marked *guessed* (in red), and a pause longer than 1.5 s is flagged ⚑ (in red): check those first. When you are satisfied, the Export cell below uses the performed scores in `scores.json` in place of the linear ones.
+    Spels that could not be matched to anything heard are marked *guessed* (in red), and a duration longer than 1.5 s is flagged ⚑ (in red): check those first. When you are satisfied, the Export cell below uses the performed scores in `scores.json` in place of the linear ones.
   </script>
   <script id="7002" type="module">
     // THE CONTROLS: a recording, a Whisper model, and a button to start. Listening is slow, so it only
@@ -404,9 +404,9 @@
 
     // When you play from a spel, start this many seconds before it, to hear the approach.
     const LEAD_IN_S = 0.5
-    // A spel whose pause (the time to the next spel's onset, in its para) is longer than this is flagged: a
-    // long pause is often an onset that is too early, or the next one too late. Check those first.
-    const FLAG_PAUSE_S = 1.5
+    // A spel whose duration (the time to the next spel's onset, in its para) is longer than this is flagged: a
+    // long duration is often an onset that is too early, or the next one too late. Check those first.
+    const FLAG_DURATION_S = 1.5
 
     const onsetEditor = (rows, file, paraNames) => {
       // THE STATE: the onsets being edited, and what we say about how each came to be
@@ -427,7 +427,7 @@
       })
       const paraSelect = Inputs.select(paraNames, { label: "Paragraph" })
       const playParaButton = html`<button>▶ play this paragraph</button>`
-      const table = html`<table><thead><tr><th></th><th>spel</th><th>onset (s)</th><th></th><th>pause (s)</th><th>heard as</th><th></th></tr></thead><tbody></tbody></table>`
+      const table = html`<table><thead><tr><th></th><th>spel</th><th>onset (s)</th><th></th><th>duration (s)</th><th>heard as</th><th></th></tr></thead><tbody></tbody></table>`
       const tbody = table.querySelector("tbody")
 
       const root = html`<div>
@@ -476,16 +476,16 @@
         return cell
       }
 
-      // The pause of the spel at i: the time to the next onset, if that spel is in the same para (else null)
-      const pauseOf = (i) => (i + 1 < rows.length && rows[i + 1].para === rows[i].para ? onsets[i + 1] - onsets[i] : null)
-      // show the pauses of the rows on screen, flagging the long ones
-      const showPauses = () => {
-        shown.forEach(({ i, pauseCell }) => {
-          const pause = pauseOf(i)
-          const long = pause !== null && pause > FLAG_PAUSE_S
-          pauseCell.textContent = pause === null ? "" : pause.toFixed(2) + (long ? " ⚑" : "")
-          pauseCell.style.color = long ? "crimson" : "gray"
-          pauseCell.style.fontWeight = long ? "bold" : ""
+      // The duration of the spel at i: the time to the next onset, if that spel is in the same para (else null)
+      const durationOfSpel = (i) => (i + 1 < rows.length && rows[i + 1].para === rows[i].para ? onsets[i + 1] - onsets[i] : null)
+      // show the durations of the rows on screen, flagging the long ones
+      const showDurations = () => {
+        shown.forEach(({ i, durationCell }) => {
+          const duration = durationOfSpel(i)
+          const long = duration !== null && duration > FLAG_DURATION_S
+          durationCell.textContent = duration === null ? "" : duration.toFixed(2) + (long ? " ⚑" : "")
+          durationCell.style.color = long ? "crimson" : "gray"
+          durationCell.style.fontWeight = long ? "bold" : ""
         })
       }
 
@@ -504,7 +504,7 @@
             onsets[i] = Math.max(0, seconds)
             labels[i] = "adjusted"
             showHow()
-            showPauses()
+            showDurations()
             root.value = onsets.slice() // a new array each time, so watchers see a change
             root.dispatchEvent(new Event("input", { bubbles: true }))
           }
@@ -526,13 +526,13 @@
             change(time)
           }
 
-          const pauseCell = td()
+          const durationCell = td()
           const tr = document.createElement("tr")
-          tr.append(td(playButton), td(rows[i].string.replace(/\s+/g, " ")), td(input), td(nowButton), pauseCell, td(rows[i].heard), howCell)
-          return { i, tr, pauseCell }
+          tr.append(td(playButton), td(rows[i].string.replace(/\s+/g, " ")), td(input), td(nowButton), durationCell, td(rows[i].heard), howCell)
+          return { i, tr, durationCell }
         })
         tbody.replaceChildren(...shown.map(({ tr }) => tr))
-        showPauses()
+        showDurations()
         highlight(audio.currentTime)
       }
 
@@ -562,17 +562,17 @@
     })
   </script>
   <script id="7009" type="module">
-    // THE PERFORMED SCORES, in the same shape as the linear `scores`: one array of { id, pause } per
-    // para, `pause` in milliseconds. The pause of a spel is the time to the next spel's onset.
-    // The last spel of a para has no next spel in its para, so it keeps its linear pause (the time to
+    // THE PERFORMED SCORES, in the same shape as the linear `scores`: one array of { id, duration } per
+    // para, `duration` in milliseconds. The duration of a spel is the time to the next spel's onset.
+    // The last spel of a para has no next spel in its para, so it keeps its linear duration (the time to
     // read it: see `scores` above); what follows the end of a para or a field is the engine's to time.
     const performedScores = onsets
       ? scores.map((score) =>
-          score.map(({ id, pause }, k) => {
-            if (k === score.length - 1) return { id, pause }
+          score.map(({ id, duration }, k) => {
+            if (k === score.length - 1) return { id, duration }
             const here = onsets[spels.get(id).index]
             const next = onsets[spels.get(score[k + 1].id).index]
-            return { id, pause: Math.max(0, Math.round((next - here) * 1000)) } // never negative, if two onsets are out of order
+            return { id, duration: Math.max(0, Math.round((next - here) * 1000)) } // never negative, if two onsets are out of order
           })
         )
       : null
@@ -580,11 +580,11 @@
     // The scores the export uses: performed if there is a performance, else linear.
     const exportedScores = performedScores ?? scores
 
-    // Linear and performed pauses side by side, to see what the performance changed
+    // Linear and performed durations side by side, to see what the performance changed
     performedScores && display(Inputs.table(
-      performedScores.flatMap((score, p) => score.map(({ id, pause }, k) => ({
+      performedScores.flatMap((score, p) => score.map(({ id, duration }, k) => ({
         para: layout.order.para[p], spel: spels.get(id).string.replace(/\s+/g, " "),
-        linearMs: scores[p][k].pause, performedMs: pause
+        linearMs: scores[p][k].duration, performedMs: duration
       }))), { rows: 12 }))
   </script>
   <script id="6003" type="module" pinned="">
@@ -596,7 +596,7 @@
     const piece = {
       "spels.json": Array.from(spels.entries()), // [[id, spel], ...]: the player builds a Map from it
       "paras.json": paraList, // [[spel ids of para 1], [para 2], ...] in text order
-      // [[{id, pause}, ...] per para]. scores.json is what the player reads: timed from the aligned
+      // [[{id, duration}, ...] per para]. scores.json is what the player reads: timed from the aligned
       // performance if there is one (see above), else the linear timeToRead scores.
       "scores.json": exportedScores,
       // the linear scores from timeToRead, always available, whether or not there is a performance
