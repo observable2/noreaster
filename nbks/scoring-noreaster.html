@@ -12,12 +12,12 @@
     // engine's version: "@main" follows the branch (cached, so it can lag a push, and is unreleased); a release tag
     // such as "@v0.5.0" pins it. Move to a new release by changing this one tag (the engine's
     // scripts/bump.js does it for a whole project; see the engine's README, "Releases").
-    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.11.0";
+    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.12.0";
     const load = async (f) => {
       try { return await import(`${engine}/${f}`); }
       catch (e) { throw new Error(`Could not load the engine file ${f} from ${engine} (offline, or tag missing?): ${e.message}`); }
     };
-    const { createConfig, configSchema, measuredWith } = await load("config.js");
+    const { createConfig, expandScoreSettings, configSchema, measuredWith } = await load("config.js");
     const { typeCss } = await load("typography.js");
 
     // createConfig gives every setting the engine's default (see the table of settings in scoring-template.html) and
@@ -60,6 +60,11 @@
       // cycleScores: false,      // true: one cycle plays every score (see scoreSettings)
       // scoreSettings: [ { durationScale: 0.5, effect: "glow", shuffle: true, interScoreMs: 0 } ],
     })
+    // Settings for only some of the scores (each may hold anything scoreSettings takes: interFieldMs, interCycleMs,
+    // holdMs, fadeOut ...), by score number from 0 (-1 counts from the end), "first", "last" or "all". The export
+    // turns this into the scoreSettings array, once the number of scores is known (expandScoreSettings, in the engine).
+    // Here: a little extra time on the first ofld, and before the last one fades.
+    const perScore = { first: { interFieldMs: 3500 }, last: { interFieldMs: 3500 } }
   </script>
   <script id="5891" type="text/html" pinned="">
     <div id="galley" class="set"><!--@ ofld -->NOR’EASTER
@@ -604,6 +609,11 @@
     // the player makes its own from it (createConfig) and takes its type CSS from it (typeCss), so
     // nothing is set twice. measured.json is only for a player page that keeps its own CSS: pass it
     // to mount() and the player warns if its type differs from what the spels were measured at.
+    // The config to export: `config` above, but with scoreSettings built from `perScore` (config cell), if it
+    // names any scores: expandScoreSettings needs the number of scores, which is known only here.
+    const exportedConfig = Object.keys(perScore).length
+      ? { ...config, scoreSettings: expandScoreSettings(perScore, exportedScores.length) }
+      : config
     const piece = {
       "spels.json": Array.from(spels.entries()), // [[id, spel], ...]: the player builds a Map from it
       "paras.json": paraList, // [[spel ids of para 1], [para 2], ...] in text order
@@ -612,7 +622,7 @@
       "scores.json": exportedScores,
       // the linear scores from timeToRead, always available, whether or not there is a performance
       "scores-timeToRead.json": scores,
-      "config.json": JSON.parse(JSON.stringify(config)),
+      "config.json": JSON.parse(JSON.stringify(exportedConfig)),
       "measured.json": measuredWith(config),
       // the onsets (seconds from the start of the recording) of the performance, by spel id, if there is one
       ...(onsets ? { "onsets.json": Object.fromEntries(Array.from(spels.keys(), (id, i) => [id, onsets[i]])) } : {})
