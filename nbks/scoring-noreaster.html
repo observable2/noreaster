@@ -12,7 +12,7 @@
     // engine's version: "@main" follows the branch (cached, so it can lag a push, and is unreleased); a release tag
     // such as "@v0.5.0" pins it. Move to a new release by changing this one tag (the engine's
     // scripts/bump.js does it for a whole project; see the engine's README, "Releases").
-    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.12.0";
+    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.13.0";
     const load = async (f) => {
       try { return await import(`${engine}/${f}`); }
       catch (e) { throw new Error(`Could not load the engine file ${f} from ${engine} (offline, or tag missing?): ${e.message}`); }
@@ -63,8 +63,9 @@
     // Settings for only some of the scores (each may hold anything scoreSettings takes: interFieldMs, interCycleMs,
     // holdMs, fadeOut ...), by score number from 0 (-1 counts from the end), "first", "last" or "all". The export
     // turns this into the scoreSettings array, once the number of scores is known (expandScoreSettings, in the engine).
-    // Here: a little extra time on the first ofld, and before the last one fades.
-    const perScore = { first: { interFieldMs: 3500 }, last: { interFieldMs: 3500 } }
+    // Here: a little extra time on the first ofld (shown 3500 ms before it fades, then dark for 1500 ms: clearPauseMs,
+    // the dark time after the fade), and before the last one fades.
+    const perScore = { first: { interFieldMs: 3500, clearPauseMs: 1500 }, last: { interFieldMs: 3500 } }
   </script>
   <script id="5891" type="text/html" pinned="">
     <div id="galley" class="set"><!--@ ofld -->NOR’EASTER
