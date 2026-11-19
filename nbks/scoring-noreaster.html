@@ -12,7 +12,7 @@
     // engine's version: "@main" follows the branch (cached, so it can lag a push, and is unreleased); a release tag
     // such as "@v0.5.0" pins it. Move to a new release by changing this one tag (the engine's
     // scripts/bump.js does it for a whole project; see the engine's README, "Releases").
-    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.9.0";
+    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.10.0";
     const load = async (f) => {
       try { return await import(`${engine}/${f}`); }
       catch (e) { throw new Error(`Could not load the engine file ${f} from ${engine} (offline, or tag missing?): ${e.message}`); }
@@ -39,7 +39,16 @@
       // --- PLAY: read by the engine while the piece plays (override here to try it; export to use it)
       // charFades: true,         // reveal spels character by character; false: whole spels
       // charIntervalMs: 80,
-      fadeWords: -1,            // n: fade each spel n spels later; 0: show, then remove the paragraph; -1: the scores fade
+      fadeOut: "ofld",         // what fades the spels: "window" (each fades fadeWords spels later), "scored" (the scores fade),
+      //                       //   "score" (a score's spels, after its last item and gap), "ofld" (an ofld's, after the score that ends it
+      //                       //   and its gap: interFieldMs, as here), "cycle" (everything, at the end of the cycle)
+      fadeStyle: "together",   // "together", or "sequence" (in the order shown, each after its item's duration)
+      // fadeOrder: "shown",   // a "sequence" fade in this order: "shown", "reverse", "random"
+      // fadeStaggerMs: 300,   // a fixed step between the spels of a "sequence" fade, in place of the item durations
+      // holdMs: 0,            // the least time the whole ofld shows (from its last spel) before it fades
+      // overlapMs: 0,         // the next score starts this long after the fade begins (a cross-fade); omit to wait for the fade
+      // revealStyle: "sequence", // "together": show all a score's spels at once, then wait out the durations
+      // fadeWords: 5,         // only with fadeOut "window": fade each spel n spels later
       // durationScale: 1,        // multiplier on all durations (2: everything lasts twice as long)
       interScoreMs: 0,
       interFieldMs: 1300 //, interParaMs: 1000, interCycleMs: 3000, creditsPauseMs: 0,
