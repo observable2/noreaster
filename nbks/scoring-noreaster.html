@@ -15,7 +15,7 @@
     // "@v0.5.0" pins it. To move to a new release, change this
     // tag (scripts/bump.js does it for a whole project; see the
     // engine's README, "Releases").
-    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.14.0";
+    const engine = "https://cdn.jsdelivr.net/gh/observable2/scoringthespeltair@v0.15.0";
     const load = async (f) => {
       try { return await import(`${engine}/${f}`); }
       catch (e) { throw new Error(`Could not load the engine file ${f} from ${engine} (offline, or tag missing?): ${e.message}`); }
@@ -75,22 +75,24 @@
       // interParaMs: 1000,  // ... after one ending a para
       interFieldMs: 2000, // ... after one ending an ofld
       interCycleMs: 5000, // at the end of each cycle
-      // clearPauseMs: 800,  // dark time after a fade
+      // clearPauseMs: 1300, // dark time after a fade
       // creditsPauseMs: 0,  // #byline shown at cycle end
 
       // startPara: 0,       // paragraph a cycle starts at
       // cycleScores: false, // true: a cycle plays every
       //   score in turn (see scoreSettings)
 
-      // --- PAGE: CSS fade times of spels and characters
-      // spelFadeMs: 1500,
-      // charFadeMs: 1300,
+      // --- PAGE: applied by the page's CSS. Defaults shown.
+      // fadeMs: 1300,       // fade of a character (charFades)
+      //   or a whole spel, in and out; a score may set its own
+      // fadeInMs: 1300,     // when it appears, instead of fadeMs
+      // fadeOutMs: 1300,    // when it disappears, instead
 
       // scoreSettings: set it through perScore, below
     })
     // Settings for only some scores (anything scoreSettings takes:
     // interFieldMs, clearPauseMs, interCycleMs, holdMs, fadeOut,
-    // durationScale, effect, spelFadeMs ...). Name a score by its
+    // durationScale, effect, fadeOutMs ...). Name a score by its
     // number from 0 (-1 counts from the end), "first", "last" or
     // "all". The export turns this into the scoreSettings array,
     // once the number of scores is known (expandScoreSettings).
@@ -825,7 +827,7 @@
       }
 
       /* the type (family, size, weight, line height, ligatures, optical size) and the fade times
-      (--spel-fade, --char-fade, --field-fade) all come from the config, through the engine's
+      (--fade-in, --fade-out, --field-fade) all come from the config, through the engine's
       typeCss, and so are the same in the player, which calls typeCss with its own selector */
       ${typeCss(config, ".set")}
 
@@ -845,21 +847,23 @@
       .spel {
         position: absolute;
         opacity: 0;
-        transition: all var(--spel-fade) ease-in-out;
+        transition: all var(--fade-out, 1.3s) ease-in-out;
       }
 
       .spel.visible {
         opacity: 1;
+        transition: all var(--fade-in, 1.3s) ease-in-out;
       }
 
       /* with charFades each spel is split into .char spans (the engine's splitIntoChars), which carry the fade */
       .char {
         opacity: 0;
-        transition: all var(--char-fade) ease-in-out;
+        transition: all var(--fade-out, 1.3s) ease-in-out;
       }
 
       .char.visible {
         opacity: 1;
+        transition: all var(--fade-in, 1.3s) ease-in-out;
       }
 
       /* an "effect" other than "visible" in a score's settings (see Playback in scoring-template.html) is a class the

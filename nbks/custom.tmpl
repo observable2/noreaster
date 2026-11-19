@@ -90,21 +90,23 @@
 
       .char {
         opacity: 0;
-        transition: all 1.3s ease-in-out;
+        transition: all var(--fade-out, 1.3s) ease-in-out;
       }
 
       .char.visible {
         opacity: 1;
+        transition: all var(--fade-in, 1.3s) ease-in-out;
       }
 
       .spel {
         position: absolute;
         opacity: 0;
-        transition: all 1.5s ease-in-out;
+        transition: all var(--fade-out, 1.3s) ease-in-out;
       }
 
       .spel.visible {
         opacity: 1;
+        transition: all var(--fade-in, 1.3s) ease-in-out;
       }
     </style>
   </head>
