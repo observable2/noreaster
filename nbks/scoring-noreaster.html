@@ -4,7 +4,7 @@
   <script id="1" type="text/markdown">
     # Scoring Noreaster
     #### *Noreaster*, by John Cayley
-    Working notebook for this piece, made from the Scoring Template (version 1.0.0): enter the text in the `galley` cell, with its markup, set the configuration in the `config` cell, then download the data files from the Export cell into `nbks/data/`. The template notebook documents the markup, the settings and playback.
+    Working notebook for this piece, made from the Scoring Template (version 1.0.0): enter the text in the `galley` cell, with its markup, set the configuration in the `config` cell, then save the data files from the Export cell into `nbks/data/` (it asks before replacing a file; or download them and move them there). The template notebook documents the markup, the settings and playback.
   </script>
   <script id="3254" type="module" pinned="">
     // THE ENGINE, from GitHub through jsDelivr (not raw.githubusercontent.com, which serves
@@ -39,10 +39,10 @@
       // --- PLAY: read by the engine while the piece plays (override here to try it; export to use it)
       // charFades: true,         // reveal spels character by character; false: whole spels
       // charIntervalMs: 80,
-      // fadeWords: 5,            // n: fade each spel n spels later; 0: show, then remove the paragraph; -1: the scores fade
+      fadeWords: -1,            // n: fade each spel n spels later; 0: show, then remove the paragraph; -1: the scores fade
       // durationScale: 1,        // multiplier on all durations (2: everything lasts twice as long)
       interScoreMs: 0,
-      interFieldMs: 1000 //, interParaMs: 1000, interCycleMs: 3000, creditsPauseMs: 0,
+      interFieldMs: 1300 //, interParaMs: 1000, interCycleMs: 3000, creditsPauseMs: 0,
       // (interScoreMs: the gap after a score; replaced by interParaMs after a score that ends a para
       // and by interFieldMs after one that ends an ofld, as here, where each line is an ofld)
       // startPara: 0,            // paragraph where each cycle starts
@@ -588,8 +588,8 @@
       }))), { rows: 12 }))
   </script>
   <script id="6003" type="module" pinned="">
-    // Export: the files the player reads, in the shape its pages read them. Download them into the
-    // project's nbks/data/ (or the piece's own folder there). config.json is the whole config above:
+    // Export: the files the player reads, in the shape its pages read them. Save them into the
+    // project's nbks/data/ (or download them and move them there). config.json is the whole config above:
     // the player makes its own from it (createConfig) and takes its type CSS from it (typeCss), so
     // nothing is set twice. measured.json is only for a player page that keeps its own CSS: pass it
     // to mount() and the player warns if its type differs from what the spels were measured at.
@@ -606,12 +606,149 @@
       // the onsets (seconds from the start of the recording) of the performance, by spel id, if there is one
       ...(onsets ? { "onsets.json": Object.fromEntries(Array.from(spels.keys(), (id, i) => [id, onsets[i]])) } : {})
     }
-    const links = Object.entries(piece).map(([name, data]) => {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }))
+    // The text of each file, as it is written: the same as an existing file's if the data are the same.
+    const texts = Object.fromEntries(Object.entries(piece).map(([name, data]) => [name, JSON.stringify(data)]))
+
+    // SAVING to the data folder. Where the browser allows it (Chrome, Edge), pick this piece's folder,
+    // nbks/data/, once (it is remembered, with the browser's permission asked again as needed). Each file is
+    // compared with the one already there, and you choose which to write: nothing is replaced until you press
+    // the button, and a file identical to what is there is left alone.
+    const canSave = typeof window.showDirectoryPicker === "function"
+    const FOLDER_NAME = "data"
+    const folderKey = "scoring-export-folder:" + location.pathname // one remembered folder per notebook
+
+    const handleStore = {
+      open: () => new Promise((resolve, reject) => {
+        const request = indexedDB.open("scoring-export", 1)
+        request.onupgradeneeded = () => request.result.createObjectStore("handles")
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      }),
+      get: async (key) => {
+        const db = await handleStore.open()
+        return new Promise((resolve) => {
+          const request = db.transaction("handles").objectStore("handles").get(key)
+          request.onsuccess = () => resolve(request.result ?? null)
+          request.onerror = () => resolve(null)
+        })
+      },
+      set: async (key, value) => {
+        const db = await handleStore.open()
+        return new Promise((resolve, reject) => {
+          const transaction = db.transaction("handles", "readwrite")
+          transaction.objectStore("handles").put(value, key)
+          transaction.oncomplete = resolve
+          transaction.onerror = () => reject(transaction.error)
+        })
+      }
+    }
+
+    // The folder to write to: the remembered one if we may still write to it, else ask (or ask again, if `choose`).
+    const getFolder = async (choose) => {
+      if (!choose) {
+        try {
+          const saved = await handleStore.get(folderKey)
+          if (saved && (await saved.requestPermission({ mode: "readwrite" })) === "granted") return saved
+        } catch (error) { /* no remembered folder: ask */ }
+      }
+      const folder = await window.showDirectoryPicker({ id: "scoring-data", mode: "readwrite" })
+      try { await handleStore.set(folderKey, folder) } catch (error) { /* it will be asked for next time */ }
+      return folder
+    }
+
+    // the text of a file in the folder, or null if it is not there
+    const readIfThere = async (folder, name) => {
+      try { return await (await (await folder.getFileHandle(name)).getFile()).text() }
+      catch (error) { if (error.name === "NotFoundError") return null; throw error }
+    }
+
+    // how the new text differs from the old, in a few words
+    const describeChange = (oldText, newText) => {
+      const sizes = `${oldText.length.toLocaleString()} → ${newText.length.toLocaleString()} characters`
+      try {
+        const [a, b] = [JSON.parse(oldText), JSON.parse(newText)]
+        const keys = Array.isArray(a) && Array.isArray(b)
+          ? Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i)
+          : [...new Set([...Object.keys(a), ...Object.keys(b)])]
+        const differ = keys.filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k])).length
+        return `${differ} of ${keys.length} ${Array.isArray(a) ? "entries" : "keys"} differ (${sizes})`
+      } catch (error) { return sizes }
+    }
+
+    const saver = () => {
+      const status = html`<div></div>`
+      const table = html`<table></table>`
+      const writeButton = html`<button disabled>Write the checked files</button>`
+      const choose = html`<button>${canSave ? "Save to the data folder…" : "Saving to a folder is not supported by this browser: use the downloads"}</button>`
+      choose.disabled = !canSave
+      const say = (text, color = "gray") => { status.textContent = text; status.style.color = color }
+      let folder = null
+      let plan = []
+
+      const check = async (pick) => {
+        try {
+          folder = await getFolder(pick)
+          const rows = []
+          for (const name of Object.keys(texts)) {
+            const old = await readIfThere(folder, name)
+            rows.push({ name, old, state: old === null ? "new" : old === texts[name] ? "identical" : "differs" })
+          }
+          plan = rows.map(({ name, old, state }) => {
+            const box = document.createElement("input")
+            box.type = "checkbox"
+            box.checked = state !== "identical" // an identical file need not be written
+            const note = document.createElement("td")
+            note.textContent = state === "new" ? "new file" : state === "identical" ? "identical: nothing to replace" : "REPLACES: " + describeChange(old, texts[name])
+            note.style.color = state === "differs" ? "crimson" : "gray"
+            const cell = (...content) => { const td = document.createElement("td"); td.append(...content); return td }
+            const row = document.createElement("tr")
+            row.append(cell(box), cell(name), note)
+            return { name, state, box, note, row }
+          })
+          table.replaceChildren(...plan.map(({ row }) => row))
+          writeButton.disabled = false
+          const warnings = []
+          if (folder.name !== FOLDER_NAME) warnings.push(`The folder is called "${folder.name}", not "${FOLDER_NAME}": is it this piece's nbks/data/?`)
+          if (rows.every(({ state }) => state === "new")) warnings.push("None of these files is in this folder yet: is it the right folder?")
+          if (!onsets) warnings.push("No performance has been aligned: scores.json is the LINEAR scores, which would replace performed ones.")
+          say(`Folder: ${folder.name}/. ${warnings.join(" ")}`.trim(), warnings.length ? "darkorange" : "gray")
+        } catch (error) {
+          if (error.name !== "AbortError") say(`Could not open the folder: ${error.message}`, "crimson")
+        }
+      }
+
+      const write = async () => {
+        writeButton.disabled = true
+        for (const { name, box, note } of plan) {
+          if (!box.checked) continue
+          try {
+            const writable = await (await folder.getFileHandle(name, { create: true })).createWritable()
+            await writable.write(texts[name])
+            await writable.close()
+            note.textContent = "written"
+            note.style.color = "green"
+            box.checked = false
+          } catch (error) {
+            note.textContent = `not written: ${error.message}`
+            note.style.color = "crimson"
+          }
+        }
+        writeButton.disabled = false
+      }
+
+      choose.onclick = () => check(true)
+      writeButton.onclick = write
+      return html`<div>${choose}${writeButton}${status}${table}</div>`
+    }
+
+    // The downloads, for a browser that cannot save to a folder (or to save elsewhere).
+    const links = Object.entries(texts).map(([name, text]) => {
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }))
       invalidation.then(() => URL.revokeObjectURL(url))
       return html`<a href="${url}" download="${name}">${name}</a>`
     })
-    display(html`<p>Download: ${links.flatMap((a, i) => (i ? [" · ", a] : [a]))}</p>`)
+    display(saver())
+    display(html`<p>Or download: ${links.flatMap((a, i) => (i ? [" · ", a] : [a]))}</p>`)
   </script>
   <script id="2861" type="module" pinned="">
     const layout = mapParaSpels(spanned)
