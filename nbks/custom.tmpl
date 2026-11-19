@@ -5,37 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/x-icon" href="./data/favicon.ico">
     <style type="text/css">
-      /* CLEANUP NOTES (see backup/custom.tmpl.bak for the original)
-         - Colours now come from the kit's theme variables (--theme-background,
-           --theme-foreground), set once on body below. Notebook theme changed
-           from "air" (light) to "midnight" (dark) in index.html so the kit's
-           dark colour-scheme matches the black page.
-         - Font comes from the kit's --serif variable, which names the web font
-           correctly ("Source Serif 4 Variable"). Only the serif is imported now.
-         - Removed: vendor-prefixed transitions/user-select, duplicate viewport
-           meta, duplicate html/body blocks, invalid "margin: none", the
-           "* { margin-top: 0 !important }" hammer, the box-sizing reset,
-           #observablehq-main (no such element), and unused rules (.clmleft,
-           .clmright, .glow, .none, img, img.zi, #byline:after float clear,
-           commented-out blocks, --bkgnd-darkblue).
-      */
+      /* Colours come from the kit's theme variables (--theme-
+         background, --theme-foreground), set once on body below;
+         index.html uses the dark "midnight" theme to match. The font
+         is the kit's --serif ("Source Serif 4 Variable"). */
       @import url("observable:styles/index.css");
       @import url("@fontsource-variable/source-serif-4/opsz.css");
       @import url("@fontsource-variable/source-serif-4/opsz-italic.css");
 
-      /* The page rules below apply only to a notebook that has the #field element (the piece,
-         index.html). Others using this template, such as the working notebook
-         scoring-noreaster.html, keep the kit's chrome and their own notebook theme. */
+      /* The page rules below apply only to a notebook that has the
+         #field element (the piece, index.html). Others using this
+         template, such as the working notebook scoring-noreaster.html,
+         keep the kit's chrome and their own notebook theme. */
 
-      /* neutralise the kit's page chrome (body margin/padding, <main> max-width) */
+      /* neutralise the kit's page chrome (body margin and padding,
+         <main> max-width) */
       html:has(#field), body:has(#field) {
         margin: 0;
         padding: 0;
       }
       body:has(#field) {
-        /* override the kit's theme colours once; everything below uses them.
-           Set on body, not :root: the theme stylesheet is injected after this
-           one and would win a same-specificity :root override. */
+        /* Override the kit's theme colours once; everything below
+           uses them. Set on body, not :root: the theme stylesheet
+           comes after this one and would win a :root override. */
         --theme-background: black;
         --theme-foreground: floralwhite;
         cursor: none;
@@ -47,20 +39,25 @@
 
       #field {
         position: absolute;
-        /* vertically: the middle of the extent of the spels (the tallest ofld's, one line here) sits 2em above
-           the middle of the viewport. #field has no height (its spels are absolutely positioned), so it
-           cannot be centred by translateY(-50%); its top is placed instead, from --extent-y and
-           --extent-h, which centerField publishes (engine 0.7.1+). The fallbacks are one line,
-           1.8em (the config's lineHeight), for an older engine. em is the field's font size. */
+        /* Vertically: the middle of the extent of the spels (the
+           tallest ofld's, one line here) sits 2em above the middle
+           of the viewport. #field has no height (its spels are
+           absolutely positioned), so its top is placed from
+           --extent-y and --extent-h, which centerField publishes.
+           The fallbacks are one line, 1.8em (the config's
+           lineHeight). em is the field's font size. */
         top: calc(50vh - var(--extent-h, 1.8em) / 2 - var(--extent-y, 0vw) - 2em);
-        /* horizontally: centred on the extent of its spels, which is the widest line's, so every ofld
-           starts at that line's left margin; see centerField in scoringthespeltair */
+        /* Horizontally: centred on the extent of its spels, which is
+           the widest line's, so every ofld starts at that line's left
+           margin (see centerField in the engine). */
         left: calc((100% - var(--extent-w, 0vw)) / 2 - var(--extent-x, 0vw));
-        /* type (family, size, weight, line height, ligatures, opsz) comes from data/config.json
-           through the engine's typeCss, injected by index.html, so it matches the notebook */
+        /* The type (family, size, weight, line height, ligatures,
+           opsz) comes from data/config.json through the engine's
+           typeCss, injected by index.html, so it matches the
+           notebook. */
         user-select: none;
         -webkit-user-select: none; /* Safari */
-        transition: opacity 2.5s ease-in-out;
+        transition: opacity var(--field-fade, 2.5s) ease-in-out;
       }
 
       #byline {
@@ -88,6 +85,9 @@
         color: lightgray;
       }
 
+      /* Two rules per unit, one for each direction: a transition
+         counts for the state it moves to. --fade-in and --fade-out
+         come from typeCss (fadeMs, fadeInMs, fadeOutMs). */
       .char {
         opacity: 0;
         transition: all var(--fade-out, 1.3s) ease-in-out;
