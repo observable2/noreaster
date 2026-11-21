@@ -16,15 +16,17 @@
       /* The page rules below apply only to a notebook that has the
          #field element (the piece, index.html). Others using this
          template, such as the working notebook scoring-noreaster.html,
-         keep the kit's chrome and their own notebook theme. */
+         keep the kit's chrome and their own notebook theme. :where()
+         keeps each rule at the specificity it would have without the
+         scope, so a page's own <style> can still override it. */
 
       /* neutralise the kit's page chrome (body margin and padding,
          <main> max-width) */
-      html:has(#field), body:has(#field) {
+      html:where(:has(#field)), body:where(:has(#field)) {
         margin: 0;
         padding: 0;
       }
-      body:has(#field) {
+      body:where(:has(#field)) {
         /* Override the kit's theme colours once; everything below
            uses them. Set on body, not :root: the theme stylesheet
            comes after this one and would win a :root override. */
@@ -32,7 +34,7 @@
         --theme-foreground: floralwhite;
         cursor: none;
       }
-      body:has(#field) main {
+      :where(body:has(#field)) main {
         margin: 0;
         max-width: none;
       }
