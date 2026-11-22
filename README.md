@@ -16,7 +16,9 @@ pinned in `package.json` to a release tag.
    `config` cell.
 2. Save `spels.json`, `paras.json`, `scores.json`, `config.json` and
    `measured.json` from the Export cell into `nbks/data/`. The player
-   (`nbks/index.html`) reads all five. `config.json` is the config the
+   (`nbks/index.html`) reads all five. The Export cell also writes
+   `spels-raw.json`, a copy of `spels.json` as measured: keep it if you
+   edit `spels.json` by hand (`diff spels-raw.json spels.json`). `config.json` is the config the
    notebook measured with; it also gives the player its type, through the
    engine's `typeCss`. `measured.json` lets the player warn in the console
    if its type differs from the type measured. To change the piece's
